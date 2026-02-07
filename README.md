@@ -1,5 +1,5 @@
 # Currency FX Summary
-
+![Currency FX Dashboard](doc/dashboard.jpg)
 andiron-cursor :white_check_mark:
 
 > Coins alone do not tell the story — this app shows you the pattern and the change. 🍍
