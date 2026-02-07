@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Currency FX Dashboard</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
+  <style>
+    :root {
+      --bg: #0f172a;
+      --surface: #1e293b;
+      --border: #334155;
+      --text: #e2e8f0;
+      --muted: #94a3b8;
+      --accent: #38bdf8;
+      --accent2: #818cf8;
+      --positive: #4ade80;
+      --negative: #f87171;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      padding: 2rem 1rem;
+    }
+    .container { max-width: 960px; margin: 0 auto; }
+    h1 {
+      font-size: 1.75rem;
+      margin-bottom: 0.25rem;
+      color: var(--accent);
+    }
+    .subtitle {
+      color: var(--muted);
+      font-size: 0.95rem;
+      margin-bottom: 1.5rem;
+    }
+
+    /* Form */
+    .form-row {
+      display: flex;
+      gap: 0.75rem;
+      flex-wrap: wrap;
+      margin-bottom: 1.5rem;
+      align-items: flex-end;
+    }
+    .form-group { display: flex; flex-direction: column; gap: 0.3rem; }
+    .form-group label { font-size: 0.8rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; }
+    .form-group input {
+      padding: 0.5rem 0.75rem;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: var(--surface);
+      color: var(--text);
+      font-size: 0.95rem;
+    }
+    .btn {
+      padding: 0.55rem 1.25rem;
+      border: none;
+      border-radius: 6px;
+      background: var(--accent);
+      color: var(--bg);
+      font-weight: 600;
+      font-size: 0.95rem;
+      cursor: pointer;
+      transition: opacity 0.15s;
+    }
+    .btn:hover { opacity: 0.85; }
+
+    /* Totals cards */
+    .totals-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 0.75rem;
+      margin-bottom: 1.5rem;
+    }
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 1rem 1.25rem;
+    }
+    .card .label { font-size: 0.75rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; }
+    .card .value { font-size: 1.4rem; font-weight: 700; margin-top: 0.25rem; }
+
+    /* Chart */
+    .chart-wrap {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 1.25rem;
+      margin-bottom: 1.5rem;
+    }
+
+    /* Table */
+    table { width: 100%; border-collapse: collapse; }
+    th, td { padding: 0.6rem 0.75rem; text-align: left; border-bottom: 1px solid var(--border); }
+    th { font-size: 0.75rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; }
+    td { font-size: 0.95rem; }
+    tr:hover td { background: rgba(56,189,248,0.04); }
+    .pos { color: var(--positive); }
+    .neg { color: var(--negative); }
+
+    /* Error */
+    .error { background: #7f1d1d33; border: 1px solid #991b1b; border-radius: 8px; padding: 1rem; color: var(--negative); margin-bottom: 1rem; }
+
+    /* Pineapple */
+    .pineapple { text-align: center; margin-top: 2rem; font-size: 0.8rem; color: var(--muted); }
+
+    @media (max-width: 600px) {
+      .form-row { flex-direction: column; }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>💱 Currency FX Dashboard</h1>
+    <p class="subtitle">EUR → USD exchange rates &middot; powered by Frankfurter API</p>
+
+    <form method="get" class="form-row">
+      <div class="form-group">
+        <label for="start_date">Start date</label>
+        <input type="date" id="start_date" name="start_date" value="{{ start_date }}">
+      </div>
+      <div class="form-group">
+        <label for="end_date">End date</label>
+        <input type="date" id="end_date" name="end_date" value="{{ end_date }}">
+      </div>
+      <button type="submit" class="btn">Fetch rates</button>
+    </form>
+
+    {% if error_message %}
+    <div class="error">{{ error_message }}</div>
+    {% endif %}
+
+    {% if summary %}
+    <!-- Totals -->
+    <div class="totals-grid">
+      <div class="card">
+        <div class="label">Start rate</div>
+        <div class="value">{{ summary.totals.start_rate }}</div>
+      </div>
+      <div class="card">
+        <div class="label">End rate</div>
+        <div class="value">{{ summary.totals.end_rate }}</div>
+      </div>
+      <div class="card">
+        <div class="label">Total change</div>
+        <div class="value {% if summary.totals.total_pct_change >= 0 %}pos{% else %}neg{% endif %}">
+          {{ summary.totals.total_pct_change }}%
+        </div>
+      </div>
+      <div class="card">
+        <div class="label">Mean rate</div>
+        <div class="value">{{ summary.totals.mean_rate }}</div>
+      </div>
+    </div>
+
+    <!-- Chart -->
+    <div class="chart-wrap">
+      <canvas id="rateChart" height="260"></canvas>
+    </div>
+
+    <!-- Table -->
+    {% if summary.days %}
+    <table>
+      <thead>
+        <tr>
+          <th>Date</th>
+          <th>Rate (EUR→USD)</th>
+          <th>% Change</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for day in summary.days %}
+        <tr>
+          <td>{{ day.date }}</td>
+          <td>{{ day.rate }}</td>
+          <td>
+            {% if day.pct_change is not None %}
+              <span class="{% if day.pct_change >= 0 %}pos{% else %}neg{% endif %}">
+                {{ day.pct_change }}%
+              </span>
+            {% else %}
+              <span style="color:var(--muted)">—</span>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% endif %}
+
+    <!-- Chart.js init -->
+    <script>
+      const days = {{ days_json|safe }};
+      if (days.length > 0) {
+        const ctx = document.getElementById('rateChart').getContext('2d');
+        new Chart(ctx, {
+          type: 'line',
+          data: {
+            labels: days.map(d => d.date),
+            datasets: [{
+              label: 'EUR → USD',
+              data: days.map(d => d.rate),
+              borderColor: '#38bdf8',
+              backgroundColor: 'rgba(56,189,248,0.1)',
+              fill: true,
+              tension: 0.3,
+              pointRadius: 4,
+              pointBackgroundColor: '#38bdf8',
+            }]
+          },
+          options: {
+            responsive: true,
+            plugins: {
+              legend: { labels: { color: '#e2e8f0' } },
+              tooltip: {
+                callbacks: {
+                  afterLabel: function(ctx) {
+                    const pct = days[ctx.dataIndex].pct_change;
+                    return pct !== null ? `Change: ${pct}%` : '';
+                  }
+                }
+              }
+            },
+            scales: {
+              x: { ticks: { color: '#94a3b8' }, grid: { color: '#1e293b' } },
+              y: { ticks: { color: '#94a3b8' }, grid: { color: '#334155' } }
+            }
+          }
+        });
+      }
+    </script>
+    {% endif %}
+
+    <p class="pineapple">🍍 Left by the door — andiron-cursor</p>
+  </div>
+</body>
+</html>
